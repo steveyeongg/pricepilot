@@ -56,7 +56,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard label="Products Tracked" value={stats?.total_products_tracked ?? 0} icon={Package} color="bg-brand-600" />
           <StatCard label="Price Checks (24h)" value={stats?.price_checks_last_24h ?? 0} icon={Activity} color="bg-emerald-500" />
-          <StatCard label="Platforms Active" value={stats?.platforms_active ?? 7} icon={TrendingUp} color="bg-amber-500" />
+          <StatCard label="Platforms Active" value={stats?.platforms_active ?? 5} icon={TrendingUp} color="bg-amber-500" />
           <StatCard label="Avg Tracked Price" value={stats ? `MYR ${stats.avg_tracked_price_myr.toFixed(2)}` : "—"} icon={TrendingUp} color="bg-violet-500" />
         </div>
 
@@ -127,7 +127,7 @@ export default function DashboardPage() {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-3">
-            Real-time price tracking across 7 Malaysian platforms. More coming soon.
+            Real-time price tracking across 5 Malaysian platforms. More coming soon.
           </p>
         </div>
       </div>

@@ -16,7 +16,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <div className="flex h-screen overflow-hidden">
             <Sidebar />
-            <main className="flex-1 overflow-y-auto bg-gray-50">
+            {/* pt-14 on mobile reserves space for the fixed top bar; md:pt-0 removes it on desktop */}
+            <main className="flex-1 overflow-y-auto bg-gray-50 pt-14 md:pt-0">
               {children}
             </main>
           </div>
