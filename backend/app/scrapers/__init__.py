@@ -4,7 +4,7 @@ from app.scrapers.lazada import LazadaScraper
 from app.scrapers.shopee import ShopeeScraper
 from app.scrapers.grocery import AeonScraper, JayaGrocerScraper, LotusScraper
 
-# Giant and 99 Speedmart do not have searchable online stores (consistently 404).
+# 99 Speedmart does not have a searchable online store (consistently 404).
 SCRAPERS = {
     "lazada": LazadaScraper,
     "shopee": ShopeeScraper,

@@ -7,7 +7,7 @@ import { Search, ExternalLink, TrendingDown, Info } from "lucide-react";
 import { PLATFORM_LABELS, PLATFORM_COLORS } from "@/lib/types";
 import { clsx } from "clsx";
 
-const ALL_PLATFORMS = ["lazada", "shopee", "aeon", "jaya_grocer", "99speedmart", "giant", "lotus"];
+const ALL_PLATFORMS = ["lazada", "shopee", "aeon", "jaya_grocer", "lotus"];
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");

@@ -11,9 +11,7 @@ const nextConfig = {
       { protocol: "https", hostname: "*.temu.com" },
       { protocol: "https", hostname: "*.alibaba.com" },
       { protocol: "https", hostname: "villagegrocer.com.my" },
-      { protocol: "https", hostname: "99speedmart.com.my" },
       { protocol: "https", hostname: "*.lotuss.com.my" },
-
     ],
   },
 };

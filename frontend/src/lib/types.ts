@@ -127,8 +127,6 @@ export const PLATFORM_LABELS: Record<string, string> = {
   shopee: "Shopee",
   aeon: "AEON",
   jaya_grocer: "Jaya Grocer",
-  "99speedmart": "99 Speedmart",
-  giant: "Giant",
   lotus: "Lotus's",
 };
 
@@ -137,7 +135,5 @@ export const PLATFORM_COLORS: Record<string, string> = {
   shopee: "#ef4444",
   aeon: "#3b82f6",
   jaya_grocer: "#10b981",
-  "99speedmart": "#8b5cf6",
-  giant: "#06b6d4",
   lotus: "#ec4899",
 };

@@ -2,8 +2,8 @@
 Malaysian grocery store scrapers.
 Targets: AEON Big, Jaya Grocer, Lotus's.
 
-Note: Giant and 99 Speedmart do not have searchable online stores — their
-      URLs consistently 404 and have been removed from this scraper module.
+Note: Giant and 99 Speedmart do not have searchable online stores and have
+      been removed. This module covers AEON Big, Jaya Grocer and Lotus's.
 """
 import logging
 import re
