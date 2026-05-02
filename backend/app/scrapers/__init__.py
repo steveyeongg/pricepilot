@@ -2,23 +2,20 @@ import asyncio
 from typing import Optional
 from app.scrapers.lazada import LazadaScraper
 from app.scrapers.shopee import ShopeeScraper
-from app.scrapers.grocery import (
-    AeonScraper, JayaGrocerScraper, SpeedmartScraper, GiantScraper, LotusScraper
-)
+from app.scrapers.grocery import AeonScraper, JayaGrocerScraper, LotusScraper
 
+# Giant and 99 Speedmart do not have searchable online stores (consistently 404).
 SCRAPERS = {
     "lazada": LazadaScraper,
     "shopee": ShopeeScraper,
     "aeon": AeonScraper,
     "jaya_grocer": JayaGrocerScraper,
-    "99speedmart": SpeedmartScraper,
-    "giant": GiantScraper,
     "lotus": LotusScraper,
 }
 
 ALL_PLATFORMS = list(SCRAPERS.keys())
 ECOMMERCE_PLATFORMS = ["lazada", "shopee"]
-GROCERY_PLATFORMS = ["aeon", "jaya_grocer", "99speedmart", "giant", "lotus"]
+GROCERY_PLATFORMS = ["aeon", "jaya_grocer", "lotus"]
 
 
 async def search_all(

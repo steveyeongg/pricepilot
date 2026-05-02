@@ -24,6 +24,17 @@ HEADERS = {
     "Connection": "keep-alive",
 }
 
+# Semaphore limits concurrent ScraperAPI requests to stay within the free-tier
+# thread limit (5). Set to 4 to leave headroom for retries.
+_scraperapi_sem: Optional[asyncio.Semaphore] = None
+
+
+def _get_sem() -> asyncio.Semaphore:
+    global _scraperapi_sem
+    if _scraperapi_sem is None:
+        _scraperapi_sem = asyncio.Semaphore(4)
+    return _scraperapi_sem
+
 
 class BaseScraper(ABC):
     platform: str = "unknown"
@@ -40,7 +51,13 @@ class BaseScraper(ABC):
             )
         return self._client
 
-    async def _get(self, url: str, **kwargs) -> httpx.Response:
+    async def _get(self, url: str, render: bool = False, **kwargs) -> httpx.Response:
+        """
+        Make a GET request, optionally routing through ScraperAPI.
+
+        render=True enables JS rendering in ScraperAPI (costs 5 credits vs 1).
+        Use only when the target page requires JavaScript to display content.
+        """
         client = await self._get_client()
         delay_secs = settings.scrape_request_delay_ms / 1000
         await asyncio.sleep(delay_secs + random.uniform(0, 0.5))
@@ -50,28 +67,37 @@ class BaseScraper(ABC):
         final_url = str(httpx.URL(url).copy_merge_params(params or {}))
 
         # Route through ScraperAPI when a key is configured.
-        # ScraperAPI makes the request from a rotating residential IP, bypassing
-        # bot-detection on Lazada, Shopee, and grocery sites.
+        # ScraperAPI makes the request from a rotating residential Malaysian IP,
+        # bypassing bot-detection on Lazada, Shopee, and grocery sites.
         using_proxy = bool(settings.scraperapi_key)
         if using_proxy:
-            proxy_url = (
-                f"http://api.scraperapi.com"
-                f"?api_key={settings.scraperapi_key}"
+            scraper_params = (
+                f"api_key={settings.scraperapi_key}"
                 f"&url={quote(final_url, safe='')}"
+                f"&country_code=my"
             )
-            log.debug("[%s] Routing via ScraperAPI: %s", self.platform, final_url)
+            if render:
+                scraper_params += "&render=true"
+            request_url = f"http://api.scraperapi.com?{scraper_params}"
+            log.debug("[%s] Routing via ScraperAPI (render=%s): %s", self.platform, render, final_url)
             # Drop custom headers — ScraperAPI provides its own realistic headers
             kwargs.pop("headers", None)
-            request_url = proxy_url
         else:
             request_url = final_url
 
         for attempt in range(settings.scrape_max_retries):
             try:
-                resp = await client.get(request_url, **kwargs)
+                if using_proxy:
+                    # Throttle concurrent ScraperAPI requests to stay within free-tier limits
+                    async with _get_sem():
+                        resp = await client.get(request_url, **kwargs)
+                else:
+                    resp = await client.get(request_url, **kwargs)
+
                 log.info("[%s] GET %s → %s", self.platform, url, resp.status_code)
                 resp.raise_for_status()
                 return resp
+
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 log.warning(
@@ -81,13 +107,14 @@ class BaseScraper(ABC):
                 if status in (403, 429):
                     if not using_proxy:
                         log.warning(
-                            "[%s] Blocked by bot-detection — set SCRAPERAPI_KEY env var to bypass",
+                            "[%s] Blocked — set SCRAPERAPI_KEY env var to bypass bot-detection",
                             self.platform,
                         )
                     raise
                 if attempt == settings.scrape_max_retries - 1:
                     raise
                 await asyncio.sleep(2 ** attempt)
+
             except httpx.RequestError as exc:
                 log.warning(
                     "[%s] Request error on %s: %s (attempt %d/%d)",

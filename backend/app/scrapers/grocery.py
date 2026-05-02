@@ -1,7 +1,9 @@
 """
 Malaysian grocery store scrapers.
-Targets: AEON Online, Jaya Grocer, 99 Speedmart, Giant, Lotus's.
-Uses BeautifulSoup HTML scraping.
+Targets: AEON Big, Jaya Grocer, Lotus's.
+
+Note: Giant and 99 Speedmart do not have searchable online stores — their
+      URLs consistently 404 and have been removed from this scraper module.
 """
 import logging
 import re
@@ -14,20 +16,23 @@ log = logging.getLogger(__name__)
 
 class AeonScraper(BaseScraper):
     platform = "aeon"
-    _BASE = "https://www.aeon.com.my"
+    _BASE = "https://aeonbig.com.my"
 
     async def search(self, query: str, limit: int = 20) -> list[dict]:
         try:
+            # AEON Big runs Magento — the standard Magento search path
             resp = await self._get(
-                f"{self._BASE}/en/product-listing/",
-                params={"q": query, "pageSize": limit},
+                f"{self._BASE}/catalogsearch/result/",
+                params={"q": query},
                 headers={"Accept": "text/html"},
             )
             soup = BeautifulSoup(resp.text, "lxml")
             results = []
-            for card in soup.select(".product-item, .product-tile")[:limit]:
-                title = _text(card, ".product-name, h3, .name")
-                price = _price(card, ".price-box .price, .product-price, [class*='price']")
+            for card in soup.select(
+                ".product-item, .item.product, .product-item-info, li[class*='product']"
+            )[:limit]:
+                title = _text(card, ".product-name, .product-item-name, h2.product-name, h3, .name")
+                price = _price(card, ".price-box .price, .product-price, span.price, [class*='price']")
                 url = _href(card, "a", self._BASE)
                 img = _src(card, "img")
                 if title and price:
@@ -52,9 +57,11 @@ class JayaGrocerScraper(BaseScraper):
             )
             soup = BeautifulSoup(resp.text, "lxml")
             results = []
-            for card in soup.select(".product-card, .product-item, [class*='product']")[:limit]:
-                title = _text(card, ".product-title, .title, h3, h4")
-                price = _price(card, ".price, .product-price, [class*='price']")
+            for card in soup.select(
+                ".product-card, .product-item, .card, [class*='product-card'], [class*='product-item']"
+            )[:limit]:
+                title = _text(card, ".product-title, .title, h3, h4, .name, [class*='title']")
+                price = _price(card, ".price, .product-price, [class*='price'], span.money")
                 url = _href(card, "a", self._BASE)
                 img = _src(card, "img")
                 if title and price:
@@ -63,63 +70,6 @@ class JayaGrocerScraper(BaseScraper):
             return results
         except Exception as exc:
             log.error("[jaya_grocer] Search failed for '%s': %s", query, exc)
-            return []
-
-
-class SpeedmartScraper(BaseScraper):
-    platform = "99speedmart"
-    _BASE = "https://www.99speedmart.com.my"
-
-    async def search(self, query: str, limit: int = 20) -> list[dict]:
-        try:
-            resp = await self._get(
-                f"{self._BASE}/search",
-                params={"keyword": query},
-                headers={"Accept": "text/html"},
-            )
-            soup = BeautifulSoup(resp.text, "lxml")
-            results = []
-            for card in soup.select(".product-item, .product, [class*='product-card']")[:limit]:
-                title = _text(card, "h2, h3, .product-name, .name")
-                price = _price(card, ".price, .product-price, [class*='price']")
-                url = _href(card, "a", self._BASE)
-                img = _src(card, "img")
-                if title and price:
-                    results.append(_make_result(self.platform, title, price, None, url, img))
-            log.info("[99speedmart] Returned %d items for '%s'", len(results), query)
-            return results
-        except Exception as exc:
-            log.error("[99speedmart] Search failed for '%s': %s", query, exc)
-            return []
-
-
-class GiantScraper(BaseScraper):
-    platform = "giant"
-    _BASE = "https://www.giant.com.my"
-
-    async def search(self, query: str, limit: int = 20) -> list[dict]:
-        try:
-            resp = await self._get(
-                f"{self._BASE}/search/",
-                params={"q": query},
-                headers={"Accept": "text/html"},
-            )
-            soup = BeautifulSoup(resp.text, "lxml")
-            results = []
-            for card in soup.select(".product-item, .product-listing-card")[:limit]:
-                title = _text(card, ".product-name, h3")
-                price_el = card.select_one(".price-box .price, .special-price .price, .regular-price .price")
-                price = _price_from_el(price_el)
-                orig_el = card.select_one(".old-price .price")
-                original = _price_from_el(orig_el)
-                url = _href(card, "a", self._BASE)
-                img = _src(card, "img")
-                if title and price:
-                    results.append(_make_result(self.platform, title, price, original, url, img))
-            log.info("[giant] Returned %d items for '%s'", len(results), query)
-            return results
-        except Exception as exc:
-            log.error("[giant] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -136,13 +86,34 @@ class LotusScraper(BaseScraper):
             )
             soup = BeautifulSoup(resp.text, "lxml")
             results = []
-            for card in soup.select(".product-item, .yCmsComponent.product")[:limit]:
-                title = _text(card, ".product-name, h3, h2")
-                price = _price(card, ".value, .price-value, [itemprop='price']")
+
+            # Lotus's runs SAP Hybris — try multiple selector strategies
+            cards = (
+                soup.select(".product-item") or
+                soup.select("cx-product-list-item") or
+                soup.select("[class*='product-list__item']") or
+                soup.select(".cx-product-container") or
+                soup.select("article[class*='product']") or
+                []
+            )
+
+            for card in cards[:limit]:
+                title = _text(
+                    card,
+                    "a.cx-product-name, .product-name, .cx-name, h3, h2, [class*='product-name'], [class*='name']",
+                )
+                price = _price(
+                    card,
+                    "lotus-price-item .lotus-price-item__price, "
+                    ".value, .lotus-price, cx-price, "
+                    "span[class*='price'], [class*='price-value'], "
+                    "[itemprop='price'], .cx-value",
+                )
                 url = _href(card, "a", self._BASE)
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, None, url, img))
+
             log.info("[lotus] Returned %d items for '%s'", len(results), query)
             return results
         except Exception as exc:
