@@ -2,15 +2,17 @@
 Shopee Malaysia scraper using their unofficial search API.
 Endpoint: https://shopee.com.my/api/v4/search/search_items
 """
+import logging
 import re
 from app.scrapers.base import BaseScraper
+
+log = logging.getLogger(__name__)
 
 
 class ShopeeScraper(BaseScraper):
     platform = "shopee"
-    _BASE = "https://shopee.com.my"
+    _BASE = "https://www.shopee.com.my"
     _SEARCH_API = f"{_BASE}/api/v4/search/search_items"
-    _ITEM_URL = f"{_BASE}/api/v4/item/get"
 
     async def search(self, query: str, limit: int = 20) -> list[dict]:
         try:
@@ -33,8 +35,11 @@ class ShopeeScraper(BaseScraper):
             data = resp.json()
             items = data.get("items", []) or []
             results = [self._parse(item) for item in items[:limit] if item.get("item_basic")]
-            return [r for r in results if r.get("price")]
-        except Exception:
+            results = [r for r in results if r.get("price")]
+            log.info("[shopee] API returned %d items for '%s'", len(results), query)
+            return results
+        except Exception as exc:
+            log.error("[shopee] Search failed for '%s': %s", query, exc)
             return []
 
     def _parse(self, item: dict) -> dict:

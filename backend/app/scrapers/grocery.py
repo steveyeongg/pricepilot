@@ -1,13 +1,15 @@
 """
 Malaysian grocery store scrapers.
 Targets: AEON Online, Jaya Grocer, 99 Speedmart, Giant, Lotus's.
-Uses BeautifulSoup HTML scraping with Playwright fallback for JS-heavy pages.
+Uses BeautifulSoup HTML scraping.
 """
+import logging
 import re
-import asyncio
 from typing import Optional
 from bs4 import BeautifulSoup
-from app.scrapers.base import BaseScraper, HEADERS
+from app.scrapers.base import BaseScraper
+
+log = logging.getLogger(__name__)
 
 
 class AeonScraper(BaseScraper):
@@ -30,8 +32,10 @@ class AeonScraper(BaseScraper):
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, None, url, img))
+            log.info("[aeon] Returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[aeon] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -55,8 +59,10 @@ class JayaGrocerScraper(BaseScraper):
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, None, url, img))
+            log.info("[jaya_grocer] Returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[jaya_grocer] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -80,8 +86,10 @@ class SpeedmartScraper(BaseScraper):
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, None, url, img))
+            log.info("[99speedmart] Returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[99speedmart] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -108,8 +116,10 @@ class GiantScraper(BaseScraper):
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, original, url, img))
+            log.info("[giant] Returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[giant] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -133,8 +143,10 @@ class LotusScraper(BaseScraper):
                 img = _src(card, "img")
                 if title and price:
                     results.append(_make_result(self.platform, title, price, None, url, img))
+            log.info("[lotus] Returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[lotus] Search failed for '%s': %s", query, exc)
             return []
 
 
@@ -187,7 +199,14 @@ def _src(soup, selector: str) -> Optional[str]:
     return el.get("src") or el.get("data-src") or el.get("data-lazy-src")
 
 
-def _make_result(platform: str, title: str, price: float, original: Optional[float], url: Optional[str], img: Optional[str]) -> dict:
+def _make_result(
+    platform: str,
+    title: str,
+    price: float,
+    original: Optional[float],
+    url: Optional[str],
+    img: Optional[str],
+) -> dict:
     discount = None
     if original and original > price:
         discount = round((original - price) / original * 100, 1)

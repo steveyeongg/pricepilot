@@ -2,8 +2,11 @@
 Lazada Malaysia scraper using their unofficial catalog search API.
 Endpoint: https://www.lazada.com.my/catalog/api/search
 """
+import logging
 import re
 from app.scrapers.base import BaseScraper
+
+log = logging.getLogger(__name__)
 
 
 class LazadaScraper(BaseScraper):
@@ -23,9 +26,11 @@ class LazadaScraper(BaseScraper):
             )
             data = resp.json()
             items = data.get("mods", {}).get("listItems", [])
-            return [self._parse(item) for item in items[:limit] if item.get("price")]
+            results = [self._parse(item) for item in items[:limit] if item.get("price")]
+            log.info("[lazada] API returned %d items for '%s'", len(results), query)
+            return results
         except Exception as exc:
-            # Fallback to HTML scraping if API is blocked
+            log.warning("[lazada] API failed for '%s': %s — trying HTML fallback", query, exc)
             return await self._scrape_html(query, limit)
 
     def _parse(self, item: dict) -> dict:
@@ -84,8 +89,10 @@ class LazadaScraper(BaseScraper):
                     "review_count": None,
                     "in_stock": True,
                 })
+            log.info("[lazada] HTML fallback returned %d items for '%s'", len(results), query)
             return results
-        except Exception:
+        except Exception as exc:
+            log.error("[lazada] HTML fallback also failed for '%s': %s", query, exc)
             return []
 
     @staticmethod

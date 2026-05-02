@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     scrape_max_retries: int = 3
     scrape_timeout_secs: int = 30
     proxy_list: str = ""
+    scraperapi_key: str = ""
 
     price_check_interval_minutes: int = 60
     alert_check_interval_minutes: int = 15

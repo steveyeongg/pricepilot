@@ -1,13 +1,16 @@
-"""Base scraper with shared HTTP client, retry logic, and rate limiting."""
+"""Base scraper with shared HTTP client, retry logic, rate limiting, and ScraperAPI proxy support."""
 import asyncio
+import logging
 import random
-import time
 from abc import ABC, abstractmethod
 from typing import Optional
+from urllib.parse import quote
+
 import httpx
 from app.config import get_settings
 
 settings = get_settings()
+log = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": (
@@ -17,6 +20,8 @@ HEADERS = {
     ),
     "Accept-Language": "en-MY,en;q=0.9,ms;q=0.8",
     "Accept": "application/json, text/html, */*",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
 }
 
 
@@ -28,13 +33,10 @@ class BaseScraper(ABC):
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            proxies = settings.proxies
-            proxy = random.choice(proxies) if proxies else None
             self._client = httpx.AsyncClient(
                 headers=HEADERS,
                 timeout=settings.scrape_timeout_secs,
                 follow_redirects=True,
-                proxies={"all://": proxy} if proxy else None,
             )
         return self._client
 
@@ -43,20 +45,62 @@ class BaseScraper(ABC):
         delay_secs = settings.scrape_request_delay_ms / 1000
         await asyncio.sleep(delay_secs + random.uniform(0, 0.5))
 
+        # Merge any params into the URL string so we can optionally wrap it
+        params = kwargs.pop("params", None)
+        final_url = str(httpx.URL(url).copy_merge_params(params or {}))
+
+        # Route through ScraperAPI when a key is configured.
+        # ScraperAPI makes the request from a rotating residential IP, bypassing
+        # bot-detection on Lazada, Shopee, and grocery sites.
+        using_proxy = bool(settings.scraperapi_key)
+        if using_proxy:
+            proxy_url = (
+                f"http://api.scraperapi.com"
+                f"?api_key={settings.scraperapi_key}"
+                f"&url={quote(final_url, safe='')}"
+            )
+            log.debug("[%s] Routing via ScraperAPI: %s", self.platform, final_url)
+            # Drop custom headers — ScraperAPI provides its own realistic headers
+            kwargs.pop("headers", None)
+            request_url = proxy_url
+        else:
+            request_url = final_url
+
         for attempt in range(settings.scrape_max_retries):
             try:
-                resp = await client.get(url, **kwargs)
+                resp = await client.get(request_url, **kwargs)
+                log.info("[%s] GET %s → %s", self.platform, url, resp.status_code)
                 resp.raise_for_status()
                 return resp
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                log.warning(
+                    "[%s] HTTP %s on %s (attempt %d/%d)",
+                    self.platform, status, url, attempt + 1, settings.scrape_max_retries,
+                )
+                if status in (403, 429):
+                    if not using_proxy:
+                        log.warning(
+                            "[%s] Blocked by bot-detection — set SCRAPERAPI_KEY env var to bypass",
+                            self.platform,
+                        )
+                    raise
                 if attempt == settings.scrape_max_retries - 1:
                     raise
                 await asyncio.sleep(2 ** attempt)
-        raise RuntimeError(f"Failed to GET {url} after {settings.scrape_max_retries} retries")
+            except httpx.RequestError as exc:
+                log.warning(
+                    "[%s] Request error on %s: %s (attempt %d/%d)",
+                    self.platform, url, exc, attempt + 1, settings.scrape_max_retries,
+                )
+                if attempt == settings.scrape_max_retries - 1:
+                    raise
+                await asyncio.sleep(2 ** attempt)
+
+        raise RuntimeError(f"Failed to GET {url}")
 
     @abstractmethod
     async def search(self, query: str, limit: int = 20) -> list[dict]:
-        """Return list of price result dicts with keys: title, price, url, platform, etc."""
         ...
 
     async def close(self):
