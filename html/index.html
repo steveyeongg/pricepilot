@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PricePilot — Your Smart Pricing Co-Pilot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            brand: { 50:'#eef2ff',100:'#e0e7ff',500:'#6366f1',600:'#4f46e5',700:'#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .tab-btn.active { background: #4f46e5; color: white; }
+    .platform-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: white; }
+    .badge-cheap  { background:#10b981; color:white; }
+    .badge-fair   { background:#6366f1; color:white; }
+    .badge-expensive { background:#ef4444; color:white; }
+    .spinner { display:none; }
+    .loading .spinner { display:inline-block; animation: spin 1s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+    .result-row:hover { background: #f8fafc; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white border-b sticky top-0 z-30 shadow-sm">
+  <div class="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">✈</div>
+      <div>
+        <span class="font-bold text-gray-900">PricePilot</span>
+        <span class="text-gray-400 text-xs ml-2">Your Smart Pricing Co-Pilot</span>
+      </div>
+    </div>
+    <nav class="hidden sm:flex gap-1">
+      <button onclick="showTab('search')" class="tab-btn active px-3 py-1.5 rounded-lg text-sm font-medium transition-colors" data-tab="search">🔍 Search</button>
+      <button onclick="showTab('fairprice')" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-600" data-tab="fairprice">💡 Fair Price</button>
+      <button onclick="showTab('roi')" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-600" data-tab="roi">📊 ROI Calc</button>
+      <button onclick="showTab('about')" class="tab-btn px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-600" data-tab="about">ℹ️ About</button>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-5 py-6">
+
+  <!-- ═══════ SEARCH TAB ═══════ -->
+  <div id="tab-search" class="tab-content">
+    <div class="mb-5">
+      <h1 class="text-xl font-semibold text-gray-900">Search & Compare Prices</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Live prices across Lazada, Shopee, AEON, Jaya Grocer, 99 Speedmart, Giant & Lotus's</p>
+    </div>
+
+    <!-- Search form -->
+    <form id="search-form" class="flex gap-2 mb-4" onsubmit="runSearch(event)">
+      <input id="search-input" type="text" placeholder="e.g. iPhone 15 Pro, Milo 1kg, Samsung 65 inch TV…"
+        class="flex-1 border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white" />
+      <button type="submit" id="search-btn" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+        <svg class="spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full" viewBox="0 0 24 24"></svg>
+        Search
+      </button>
+    </form>
+
+    <!-- Platform filters -->
+    <div id="platform-filters" class="flex flex-wrap gap-2 mb-5">
+      <!-- Rendered by JS -->
+    </div>
+
+    <!-- Fair Price banner -->
+    <div id="fair-price-banner" class="hidden bg-gradient-to-r from-brand-50 to-blue-50 border border-brand-200 rounded-xl p-4 mb-5 fade-in">
+      <div class="flex items-start gap-3">
+        <span class="text-lg mt-0.5">💡</span>
+        <div id="fair-price-content" class="flex-1"></div>
+      </div>
+    </div>
+
+    <!-- Sort bar -->
+    <div id="sort-bar" class="hidden flex items-center justify-between mb-3">
+      <p id="result-count" class="text-sm text-gray-500"></p>
+      <div class="flex gap-1">
+        <button onclick="sortResults('price')" id="sort-price" class="px-3 py-1 text-xs rounded-md font-medium bg-brand-600 text-white">Sort by Price</button>
+        <button onclick="sortResults('platform')" id="sort-platform" class="px-3 py-1 text-xs rounded-md font-medium bg-gray-100 text-gray-600">By Platform</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="search-results" class="bg-white rounded-xl border overflow-hidden hidden">
+      <div id="results-body"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="search-empty" class="text-center py-16 text-gray-400">
+      <div class="text-5xl mb-3">🔍</div>
+      <p class="font-medium">Start searching for any product</p>
+      <p class="text-sm mt-1">We'll check across 7 Malaysian platforms simultaneously</p>
+    </div>
+  </div>
+
+  <!-- ═══════ FAIR PRICE TAB ═══════ -->
+  <div id="tab-fairprice" class="tab-content hidden">
+    <div class="mb-5">
+      <h1 class="text-xl font-semibold">Fair Price Intelligence</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Instantly know what's a fair price — for any product in Malaysia</p>
+    </div>
+
+    <form onsubmit="runFairPrice(event)" class="flex gap-2 mb-6">
+      <input id="fp-input" type="text" placeholder="e.g. Milo 1kg, AirPods Pro, Sony headphones…"
+        class="flex-1 border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white" />
+      <button type="submit" id="fp-btn" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+        <svg class="spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full" viewBox="0 0 24 24"></svg>
+        Analyse
+      </button>
+    </form>
+
+    <div id="fp-result" class="hidden fade-in"></div>
+    <div id="fp-empty" class="text-center py-16 text-gray-400">
+      <div class="text-5xl mb-3">💡</div>
+      <p class="font-medium">Enter any product to get fair price analysis</p>
+      <p class="text-sm mt-1">We'll compute the market median, fair range, and classify sellers as Cheap / Fair / Expensive</p>
+    </div>
+  </div>
+
+  <!-- ═══════ ROI TAB ═══════ -->
+  <div id="tab-roi" class="tab-content hidden">
+    <div class="mb-5">
+      <h1 class="text-xl font-semibold">ROI & Profit Optimizer</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Simulate how price changes affect your revenue and profit</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Form -->
+      <div class="bg-white rounded-xl border p-5">
+        <h2 class="font-semibold text-gray-800 mb-4">📥 Your Numbers</h2>
+        <form onsubmit="runROI(event)" class="space-y-4">
+          <div>
+            <label class="text-sm font-medium text-gray-700">Selling Price (MYR)</label>
+            <input id="roi-price" type="number" step="0.01" required value="99.90"
+              class="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Cost / COGS per unit (MYR)</label>
+            <input id="roi-cost" type="number" step="0.01" required value="45.00"
+              class="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Monthly Units Sold</label>
+            <input id="roi-units" type="number" step="1" required value="100"
+              class="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700" title="Negative. Typical: -1.0 to -2.5. -1.5 is a good default.">
+              Price Elasticity ℹ️
+            </label>
+            <input id="roi-elasticity" type="number" step="0.1" required value="-1.5"
+              class="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            <p class="text-xs text-gray-400 mt-1">-1.0 = inelastic · -2.5 = very price-sensitive</p>
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Market Median Price (optional)</label>
+            <input id="roi-median" type="number" step="0.01"
+              placeholder="From Fair Price tab" class="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+          <button type="submit" id="roi-btn" class="bg-brand-600 hover:bg-brand-700 text-white w-full py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors">
+            <svg class="spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full" viewBox="0 0 24 24"></svg>
+            ⚡ Run Simulation
+          </button>
+        </form>
+      </div>
+
+      <!-- Results -->
+      <div class="lg:col-span-2" id="roi-result-panel">
+        <div class="bg-white rounded-xl border p-8 text-center text-gray-400 h-full flex flex-col items-center justify-center">
+          <div class="text-5xl mb-3">📊</div>
+          <p class="font-medium">Enter your numbers and run the simulation</p>
+          <p class="text-sm mt-1">See optimal pricing, break-even, and revenue scenarios</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ ABOUT TAB ═══════ -->
+  <div id="tab-about" class="tab-content hidden">
+    <div class="max-w-2xl">
+      <div class="flex items-center gap-4 mb-6">
+        <div class="w-14 h-14 bg-brand-600 rounded-2xl flex items-center justify-center text-2xl">✈</div>
+        <div>
+          <h1 class="text-2xl font-bold">PricePilot</h1>
+          <p class="text-gray-500">Your Smart Pricing Co-Pilot</p>
+        </div>
+      </div>
+      <p class="text-gray-700 text-sm leading-relaxed mb-4">
+        <strong>Know the right price — instantly, automatically and with confidence.</strong>
+      </p>
+      <p class="text-gray-600 text-sm leading-relaxed mb-6">
+        PricePilot is a Dynamic Pricing & Competitor Intelligence Platform built for Malaysian SMEs, online sellers,
+        and price-conscious consumers. We track prices across 7+ platforms and give you the intelligence
+        to always price right.
+      </p>
+
+      <h2 class="font-semibold mb-3">Platforms Covered</h2>
+      <div class="flex flex-wrap gap-2 mb-6" id="about-platforms"></div>
+
+      <h2 class="font-semibold mb-3">Features</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        <div class="bg-white border rounded-xl p-4"><div class="text-2xl mb-2">🔍</div><p class="font-medium text-sm">Cross-platform Search</p><p class="text-xs text-gray-500 mt-1">Compare prices across Lazada, Shopee, AEON, Jaya Grocer, Giant, Lotus's & 99 Speedmart</p></div>
+        <div class="bg-white border rounded-xl p-4"><div class="text-2xl mb-2">💡</div><p class="font-medium text-sm">Fair Price Intelligence</p><p class="text-xs text-gray-500 mt-1">Market median, fair range, and Cheap / Fair / Expensive classification</p></div>
+        <div class="bg-white border rounded-xl p-4"><div class="text-2xl mb-2">🔔</div><p class="font-medium text-sm">Smart Alerts</p><p class="text-xs text-gray-500 mt-1">Get notified when prices drop, spike, or hit your target</p></div>
+        <div class="bg-white border rounded-xl p-4"><div class="text-2xl mb-2">📊</div><p class="font-medium text-sm">ROI Optimizer</p><p class="text-xs text-gray-500 mt-1">Simulate price changes vs demand impact with profit/margin analysis</p></div>
+      </div>
+
+      <h2 class="font-semibold mb-3">For Developers</h2>
+      <div class="bg-gray-900 rounded-xl p-4 text-sm font-mono text-green-400">
+        <p># Run locally</p>
+        <p>cd backend && uvicorn app.main:app --reload</p>
+        <p>cd frontend && npm run dev</p>
+        <p class="mt-2 text-gray-500"># API docs at http://localhost:8000/docs</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Mobile nav -->
+<div class="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t flex">
+  <button onclick="showTab('search')" class="flex-1 py-3 text-xs font-medium text-gray-600 flex flex-col items-center gap-0.5" data-tab-m="search">🔍<span>Search</span></button>
+  <button onclick="showTab('fairprice')" class="flex-1 py-3 text-xs font-medium text-gray-600 flex flex-col items-center gap-0.5" data-tab-m="fairprice">💡<span>Fair Price</span></button>
+  <button onclick="showTab('roi')" class="flex-1 py-3 text-xs font-medium text-gray-600 flex flex-col items-center gap-0.5" data-tab-m="roi">📊<span>ROI</span></button>
+  <button onclick="showTab('about')" class="flex-1 py-3 text-xs font-medium text-gray-600 flex flex-col items-center gap-0.5" data-tab-m="about">ℹ️<span>About</span></button>
+</div>
+
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+const API_BASE = (window.PRICEPILOT_API || 'http://localhost:8000');
+
+const PLATFORMS = {
+  lazada:      { label: 'Lazada',       color: '#f97316' },
+  shopee:      { label: 'Shopee',       color: '#ef4444' },
+  aeon:        { label: 'AEON',         color: '#3b82f6' },
+  jaya_grocer: { label: 'Jaya Grocer',  color: '#10b981' },
+  '99speedmart':{ label: '99 Speedmart',color: '#8b5cf6' },
+  giant:       { label: 'Giant',        color: '#06b6d4' },
+  lotus:       { label: "Lotus's",      color: '#ec4899' },
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let selectedPlatforms = new Set();
+let allResults = [];
+let currentSort = 'price';
+let roiChart = null;
+let fpChart = null;
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const active = btn.dataset.tab === name;
+    btn.classList.toggle('active', active);
+    if (!active) btn.className = btn.className.replace('bg-brand-600 text-white', 'bg-gray-100 text-gray-600');
+    if (!active && !btn.className.includes('bg-gray')) btn.classList.add('bg-gray-100', 'text-gray-600');
+  });
+}
+
+// ─── Platform filters ─────────────────────────────────────────────────────────
+function initPlatformFilters() {
+  const container = document.getElementById('platform-filters');
+  Object.entries(PLATFORMS).forEach(([key, { label, color }]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.platform = key;
+    btn.textContent = label;
+    btn.style.cssText = `border: 1.5px solid ${color}; color: ${color}; padding: 3px 10px; border-radius: 999px; font-size:12px; font-weight:600; background:transparent; cursor:pointer; transition: all 0.15s;`;
+    btn.onclick = () => {
+      if (selectedPlatforms.has(key)) { selectedPlatforms.delete(key); btn.style.background = 'transparent'; btn.style.color = color; }
+      else { selectedPlatforms.add(key); btn.style.background = color; btn.style.color = 'white'; }
+    };
+    container.appendChild(btn);
+  });
+
+  // About page platforms
+  const ap = document.getElementById('about-platforms');
+  Object.entries(PLATFORMS).forEach(([, { label, color }]) => {
+    const s = document.createElement('span');
+    s.className = 'platform-badge';
+    s.style.background = color;
+    s.textContent = label;
+    ap.appendChild(s);
+  });
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+async function runSearch(e) {
+  e.preventDefault();
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+
+  setLoading('search-btn', true);
+  document.getElementById('search-empty').classList.add('hidden');
+  document.getElementById('fair-price-banner').classList.add('hidden');
+  document.getElementById('sort-bar').classList.add('hidden');
+  document.getElementById('search-results').classList.add('hidden');
+
+  const platforms = selectedPlatforms.size > 0 ? [...selectedPlatforms].join(',') : null;
+
+  try {
+    const [searchData, fpData] = await Promise.allSettled([
+      apiFetch(`/api/search?q=${encodeURIComponent(q)}&limit=12${platforms ? '&platforms=' + platforms : ''}`),
+      apiFetch(`/api/search/fair-price?q=${encodeURIComponent(q)}${platforms ? '&platforms=' + platforms : ''}`),
+    ]);
+
+    if (searchData.status === 'fulfilled' && searchData.value?.results?.length) {
+      allResults = searchData.value.results;
+      renderResults(q);
+      document.getElementById('result-count').textContent = `${searchData.value.total_results} results · ${searchData.value.search_duration_ms}ms`;
+      document.getElementById('sort-bar').classList.remove('hidden');
+    } else {
+      useMockResults(q);
+    }
+
+    if (fpData.status === 'fulfilled' && fpData.value) {
+      renderFairPriceBanner(fpData.value);
+    } else if (allResults.length >= 3) {
+      renderFairPriceFromResults(q, allResults);
+    }
+
+  } catch {
+    useMockResults(q);
+  } finally {
+    setLoading('search-btn', false);
+  }
+}
+
+function useMockResults(q) {
+  allResults = generateMockResults(q);
+  renderResults(q);
+  renderFairPriceFromResults(q, allResults);
+  document.getElementById('result-count').textContent = `${allResults.length} demo results (connect backend for live data)`;
+  document.getElementById('sort-bar').classList.remove('hidden');
+}
+
+function renderResults(q) {
+  const sorted = sortData([...allResults], currentSort);
+  const fp = computeFairPriceLocal(allResults.map(r => r.price));
+  const body = document.getElementById('results-body');
+  body.innerHTML = '';
+  sorted.forEach(r => {
+    const cls = r.price <= fp.cheap ? 'cheap' : r.price >= fp.expensive ? 'expensive' : 'fair';
+    const pCfg = PLATFORMS[r.platform] || { label: r.platform, color: '#6b7280' };
+    const row = document.createElement('div');
+    row.className = 'result-row flex items-center gap-3 px-5 py-3 border-b last:border-0 transition-colors';
+    row.innerHTML = `
+      <div class="w-10 h-10 bg-gray-100 rounded-md overflow-hidden shrink-0 flex items-center justify-center">
+        ${r.image_url ? `<img src="${r.image_url}" alt="" class="w-full h-full object-contain" onerror="this.style.display='none'" />` : '📦'}
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm text-gray-800 font-medium truncate">${escHtml(r.title)}</p>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span class="platform-badge" style="background:${pCfg.color}">${pCfg.label}</span>
+          ${r.seller_name ? `<span class="text-xs text-gray-400">${escHtml(r.seller_name)}</span>` : ''}
+          ${r.rating ? `<span class="text-xs text-amber-500">★ ${r.rating.toFixed(1)}</span>` : ''}
+        </div>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="flex items-center gap-2 justify-end">
+          <span class="badge-${cls} text-xs font-semibold px-2 py-0.5 rounded-full">${cls.charAt(0).toUpperCase()+cls.slice(1)}</span>
+          <span class="font-bold text-gray-900">MYR ${r.price.toFixed(2)}</span>
+        </div>
+        ${r.original_price ? `<p class="text-xs text-gray-400 line-through">MYR ${r.original_price.toFixed(2)}</p>` : ''}
+        ${r.discount_pct ? `<p class="text-xs text-emerald-600">-${r.discount_pct}% off</p>` : ''}
+      </div>
+      ${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" class="text-gray-400 hover:text-brand-600 shrink-0 text-lg">↗</a>` : ''}
+    `;
+    body.appendChild(row);
+  });
+  document.getElementById('search-results').classList.remove('hidden');
+}
+
+function sortResults(by) {
+  currentSort = by;
+  document.getElementById('sort-price').className = by === 'price'
+    ? 'px-3 py-1 text-xs rounded-md font-medium bg-brand-600 text-white'
+    : 'px-3 py-1 text-xs rounded-md font-medium bg-gray-100 text-gray-600';
+  document.getElementById('sort-platform').className = by === 'platform'
+    ? 'px-3 py-1 text-xs rounded-md font-medium bg-brand-600 text-white'
+    : 'px-3 py-1 text-xs rounded-md font-medium bg-gray-100 text-gray-600';
+  if (allResults.length) renderResults('');
+}
+
+function sortData(arr, by) {
+  return by === 'price' ? arr.sort((a,b) => a.price - b.price) : arr.sort((a,b) => a.platform.localeCompare(b.platform));
+}
+
+// ─── Fair Price ───────────────────────────────────────────────────────────────
+async function runFairPrice(e) {
+  e.preventDefault();
+  const q = document.getElementById('fp-input').value.trim();
+  if (!q) return;
+
+  setLoading('fp-btn', true);
+  document.getElementById('fp-empty').classList.add('hidden');
+  document.getElementById('fp-result').classList.add('hidden');
+
+  try {
+    let data = await apiFetch(`/api/search/fair-price?q=${encodeURIComponent(q)}`);
+    if (!data) {
+      const results = await apiFetch(`/api/search?q=${encodeURIComponent(q)}&limit=15`);
+      if (results?.results?.length) {
+        data = computeFairPriceFromAPI(q, results.results);
+      }
+    }
+    if (!data) data = computeFairPriceMock(q);
+    renderFairPriceDetail(data);
+  } catch {
+    renderFairPriceDetail(computeFairPriceMock(q));
+  } finally {
+    setLoading('fp-btn', false);
+  }
+}
+
+function renderFairPriceBanner(fp) {
+  const banner = document.getElementById('fair-price-banner');
+  document.getElementById('fair-price-content').innerHTML = `
+    <p class="font-semibold text-indigo-800 text-sm mb-2">💡 Fair Price — ${escHtml(fp.product_name)}</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div><p class="text-xs text-gray-500">Market Median</p><p class="font-bold text-gray-900">MYR ${fp.median_price.toFixed(2)}</p></div>
+      <div><p class="text-xs text-gray-500">Fair Range</p><p class="font-bold text-emerald-700">MYR ${fp.fair_price_low.toFixed(2)} – ${fp.fair_price_high.toFixed(2)}</p></div>
+      <div><p class="text-xs text-gray-500">Cheapest</p><p class="font-bold text-gray-900">MYR ${fp.min_price.toFixed(2)}</p></div>
+      <div><p class="text-xs text-gray-500">Listings</p><p class="font-bold text-gray-900">${fp.total_listings}</p></div>
+    </div>
+  `;
+  banner.classList.remove('hidden');
+}
+
+function renderFairPriceFromResults(q, results) {
+  const prices = results.map(r => r.price).filter(p => p > 0);
+  if (prices.length < 2) return;
+  const fp = computeFairPriceLocal(prices);
+  renderFairPriceBanner({ product_name: q, median_price: fp.median, fair_price_low: fp.low, fair_price_high: fp.high, min_price: fp.min, total_listings: prices.length });
+}
+
+function renderFairPriceDetail(fp) {
+  const el = document.getElementById('fp-result');
+  el.innerHTML = `
+    <div class="bg-white rounded-xl border p-5 mb-5">
+      <h2 class="font-semibold text-gray-800 mb-4">${escHtml(fp.product_name || 'Product')}</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
+        <div class="bg-brand-50 border border-brand-200 rounded-xl p-4"><p class="text-xs text-gray-500">Market Median</p><p class="text-xl font-bold text-brand-700 mt-1">MYR ${fp.median_price.toFixed(2)}</p></div>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4"><p class="text-xs text-gray-500">Fair Range</p><p class="text-sm font-bold text-emerald-700 mt-1">MYR ${fp.fair_price_low.toFixed(2)}–${fp.fair_price_high.toFixed(2)}</p></div>
+        <div class="bg-gray-50 border rounded-xl p-4"><p class="text-xs text-gray-500">Min (Cheapest)</p><p class="text-xl font-bold text-gray-900 mt-1">MYR ${fp.min_price.toFixed(2)}</p></div>
+        <div class="bg-gray-50 border rounded-xl p-4"><p class="text-xs text-gray-500">Max (Most Expensive)</p><p class="text-xl font-bold text-gray-900 mt-1">MYR ${fp.max_price.toFixed(2)}</p></div>
+      </div>
+
+      <!-- Price bar visualisation -->
+      <div class="mt-4">
+        <p class="text-xs font-medium text-gray-500 mb-2">Price Distribution</p>
+        <div class="relative h-6 bg-gray-100 rounded-full overflow-hidden">
+          <div class="absolute inset-y-0 bg-emerald-400 rounded-full opacity-60" style="${priceBarStyle(fp)}"></div>
+          <div class="absolute inset-y-0 w-0.5 bg-brand-600" style="left:${pctPos(fp.median_price, fp.min_price, fp.max_price)}%"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-400 mt-1">
+          <span>MYR ${fp.min_price.toFixed(0)}</span>
+          <span class="font-medium text-brand-600">Median MYR ${fp.median_price.toFixed(0)}</span>
+          <span>MYR ${fp.max_price.toFixed(0)}</span>
+        </div>
+      </div>
+
+      <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+        <span class="font-semibold">Classification guide:</span>
+        <span class="inline-block ml-2 badge-cheap text-xs px-2 py-0.5 rounded-full">Cheap</span> ≤ MYR ${fp.cheap_threshold.toFixed(2)} &nbsp;
+        <span class="inline-block badge-fair text-xs px-2 py-0.5 rounded-full">Fair</span> MYR ${fp.cheap_threshold.toFixed(2)}–${fp.expensive_threshold.toFixed(2)} &nbsp;
+        <span class="inline-block badge-expensive text-xs px-2 py-0.5 rounded-full">Expensive</span> ≥ MYR ${fp.expensive_threshold.toFixed(2)}
+      </div>
+
+      ${fp.platforms_covered?.length ? `<p class="text-xs text-gray-400 mt-3">Based on ${fp.total_listings} listings across: ${fp.platforms_covered.map(p => PLATFORMS[p]?.label || p).join(', ')}</p>` : ''}
+    </div>
+  `;
+  el.classList.remove('hidden');
+}
+
+function priceBarStyle(fp) {
+  const range = fp.max_price - fp.min_price;
+  if (!range) return 'left:0%;right:0%';
+  const left = ((fp.fair_price_low - fp.min_price) / range * 100).toFixed(1);
+  const right = (100 - (fp.fair_price_high - fp.min_price) / range * 100).toFixed(1);
+  return `left:${left}%;right:${right}%`;
+}
+
+function pctPos(val, min, max) {
+  if (max === min) return 50;
+  return ((val - min) / (max - min) * 100).toFixed(1);
+}
+
+// ─── ROI ──────────────────────────────────────────────────────────────────────
+async function runROI(e) {
+  e.preventDefault();
+  setLoading('roi-btn', true);
+
+  const body = {
+    selling_price: +document.getElementById('roi-price').value,
+    cost_price: +document.getElementById('roi-cost').value,
+    monthly_units: +document.getElementById('roi-units').value,
+    price_elasticity: +document.getElementById('roi-elasticity').value,
+  };
+  const median = document.getElementById('roi-median').value;
+  if (median) body.market_median_price = +median;
+
+  let result;
+  try {
+    result = await apiFetch('/api/roi/simulate', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+  } catch {
+    result = computeROILocal(body);
+  }
+  if (!result) result = computeROILocal(body);
+
+  renderROIResult(result);
+  setLoading('roi-btn', false);
+}
+
+function renderROIResult(r) {
+  const panel = document.getElementById('roi-result-panel');
+  panel.innerHTML = `
+    <div class="space-y-4 fade-in">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white border rounded-xl p-4"><p class="text-xs text-gray-500">Current Revenue</p><p class="text-lg font-bold mt-0.5">MYR ${r.current.revenue.toFixed(0)}<span class="text-xs text-gray-400 font-normal">/mo</span></p></div>
+        <div class="bg-white border rounded-xl p-4"><p class="text-xs text-gray-500">Current Profit</p><p class="text-lg font-bold mt-0.5">MYR ${r.current.gross_profit.toFixed(0)}</p><p class="text-xs text-gray-400">${r.current.margin_pct.toFixed(1)}% margin</p></div>
+        <div class="bg-brand-50 border border-brand-300 rounded-xl p-4"><p class="text-xs text-gray-500">Optimal Price</p><p class="text-lg font-bold text-brand-700 mt-0.5">MYR ${r.optimal_price.toFixed(2)}</p><p class="text-xs text-brand-600">${r.optimal_margin_pct.toFixed(1)}% margin</p></div>
+        <div class="bg-white border rounded-xl p-4"><p class="text-xs text-gray-500">Break-even</p><p class="text-lg font-bold mt-0.5">MYR ${r.break_even_price.toFixed(2)}</p></div>
+      </div>
+
+      <div class="bg-brand-50 border-l-4 border-brand-500 rounded-r-xl p-4">
+        <p class="text-sm font-semibold text-brand-800 mb-1">💡 Recommendation</p>
+        <p class="text-sm text-brand-700">${escHtml(r.recommendation)}</p>
+        ${r.market_position ? `<p class="text-xs text-brand-500 mt-1">${escHtml(r.market_position)}</p>` : ''}
+      </div>
+
+      <div class="bg-white border rounded-xl p-5">
+        <h3 class="font-semibold text-gray-800 mb-3">Gross Profit by Price Point</h3>
+        <canvas id="roi-chart" height="220"></canvas>
+      </div>
+
+      <div class="bg-white border rounded-xl overflow-hidden">
+        <div class="px-5 py-3 border-b bg-gray-50"><p class="text-sm font-semibold text-gray-700">Scenarios</p></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="border-b text-xs text-gray-500"><th class="px-4 py-2 text-left">Price</th><th class="px-4 py-2 text-right">Units</th><th class="px-4 py-2 text-right">Revenue</th><th class="px-4 py-2 text-right">Profit</th><th class="px-4 py-2 text-right">Margin</th><th class="px-4 py-2 text-right">vs Current</th></tr></thead>
+            <tbody>
+              ${r.scenarios.map(s => {
+                const isOpt = s.price === r.optimal_price;
+                const isCur = s.price === r.current.price;
+                const bg = isOpt ? 'background:#eef2ff' : isCur ? 'background:#fffbeb' : '';
+                const badge = isOpt ? '<span style="background:#4f46e5;color:white;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px">Optimal</span>' :
+                               isCur ? '<span style="background:#f59e0b;color:white;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px">Current</span>' : '';
+                const vsColor = s.vs_current_profit_pct > 0 ? '#10b981' : s.vs_current_profit_pct < 0 ? '#ef4444' : '#9ca3af';
+                return `<tr style="${bg}" class="border-b last:border-0">
+                  <td class="px-4 py-2 font-medium">MYR ${s.price.toFixed(2)}${badge}</td>
+                  <td class="px-4 py-2 text-right text-gray-600">${s.units.toFixed(0)}</td>
+                  <td class="px-4 py-2 text-right text-gray-600">MYR ${s.revenue.toFixed(0)}</td>
+                  <td class="px-4 py-2 text-right font-medium ${s.gross_profit < 0 ? 'text-red-600' : ''}">MYR ${s.gross_profit.toFixed(0)}</td>
+                  <td class="px-4 py-2 text-right text-gray-600">${s.margin_pct.toFixed(1)}%</td>
+                  <td class="px-4 py-2 text-right font-medium" style="color:${vsColor}">${s.vs_current_profit_pct > 0 ? '+' : ''}${s.vs_current_profit_pct.toFixed(1)}%</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Render chart
+  const ctx = document.getElementById('roi-chart').getContext('2d');
+  if (roiChart) roiChart.destroy();
+  roiChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: r.scenarios.map(s => `RM${s.price.toFixed(0)}`),
+      datasets: [{
+        label: 'Gross Profit (MYR)',
+        data: r.scenarios.map(s => s.gross_profit),
+        backgroundColor: r.scenarios.map(s =>
+          s.price === r.optimal_price ? '#6366f1' :
+          s.price === r.current.price ? '#f59e0b' : '#c7d2fe'
+        ),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 }, callback: v => 'RM' + v.toFixed(0) } }
+      }
+    }
+  });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+async function apiFetch(path, opts) {
+  const r = await fetch(API_BASE + path, opts);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (loading) btn.classList.add('loading');
+  else btn.classList.remove('loading');
+  btn.disabled = loading;
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function computeFairPriceLocal(prices) {
+  const sorted = [...prices].sort((a,b) => a-b);
+  const n = sorted.length;
+  const med = n % 2 === 0 ? (sorted[n/2-1]+sorted[n/2])/2 : sorted[Math.floor(n/2)];
+  const mean = prices.reduce((a,b) => a+b, 0) / n;
+  const variance = prices.reduce((s,p) => s + Math.pow(p-mean,2), 0) / (n-1 || 1);
+  const std = Math.sqrt(variance);
+  const pct = (p) => { const idx = p/100*(n-1); const lo=Math.floor(idx),hi=Math.min(lo+1,n-1); return sorted[lo]+(sorted[hi]-sorted[lo])*(idx-lo); };
+  return { min: sorted[0], max: sorted[n-1], median: med, std, low: Math.max(med-std, sorted[0]), high: Math.min(med+std, sorted[n-1]), cheap: pct(25), expensive: pct(75) };
+}
+
+function computeFairPriceFromAPI(q, results) {
+  const prices = results.map(r => r.price).filter(p => p > 0);
+  const fp = computeFairPriceLocal(prices);
+  return { product_name: q, min_price: fp.min, max_price: fp.max, median_price: fp.median, mean_price: fp.median, std_dev: fp.std, fair_price_low: fp.low, fair_price_high: fp.high, cheap_threshold: fp.cheap, expensive_threshold: fp.expensive, total_listings: prices.length, platforms_covered: [...new Set(results.map(r => r.platform))] };
+}
+
+function computeFairPriceMock(q) {
+  const base = hashNum(q, 50, 300);
+  return { product_name: q, min_price: base*0.7, max_price: base*1.6, median_price: base, mean_price: base*1.05, std_dev: base*0.15, fair_price_low: base*0.88, fair_price_high: base*1.18, cheap_threshold: base*0.8, expensive_threshold: base*1.25, total_listings: 18 + (hashNum(q,0,30)|0), platforms_covered: ['lazada','shopee','aeon','jaya_grocer'] };
+}
+
+function computeROILocal({ selling_price: p0, cost_price: cost, monthly_units: q0, price_elasticity: e, market_median_price }) {
+  function demand(p) { return Math.max(0, q0 * Math.pow(p/p0, e)); }
+  const optP = e < -1 ? Math.max(cost * e/(e+1), cost*1.05) : p0;
+  const scenario = (p) => {
+    const units = demand(p), rev = p*units, profit = (p-cost)*units, margin = p > 0 ? (p-cost)/p*100 : 0;
+    const curRev = p0*q0, curProfit = (p0-cost)*q0;
+    return { price: p, units, revenue: rev, gross_profit: profit, margin_pct: margin, vs_current_revenue_pct: curRev ? (rev-curRev)/curRev*100 : 0, vs_current_profit_pct: curProfit ? (profit-curProfit)/curProfit*100 : 0 };
+  };
+  const prices = [0.6,0.7,0.75,0.8,0.85,0.9,0.95,1.0,1.05,1.1,1.15,1.2,1.3,1.4].map(f => Math.round(p0*f*100)/100);
+  const uniqPrices = [...new Set([...prices, Math.round(optP*100)/100])].sort((a,b) => a-b).filter(p => p > cost);
+  const diff = market_median_price ? ((p0-market_median_price)/market_median_price*100).toFixed(1) : null;
+  const curProfit = (p0-cost)*q0, optProfit = (optP-cost)*demand(optP);
+  return {
+    current: scenario(p0), break_even_price: cost, break_even_units: demand(cost), optimal_price: Math.round(optP*100)/100, optimal_revenue: optP*demand(optP), optimal_margin_pct: (optP-cost)/optP*100,
+    scenarios: uniqPrices.map(scenario),
+    recommendation: `${optP > p0 ? 'Raising' : 'Lowering'} price to MYR ${optP.toFixed(2)} is estimated to ${optProfit >= curProfit ? '+' : ''}${(optProfit-curProfit).toFixed(2)} MYR/mo gross profit. Optimal margin: ${((optP-cost)/optP*100).toFixed(1)}%.`,
+    market_position: diff ? `Your price is ${Math.abs(diff)}% ${parseFloat(diff) > 0 ? 'above' : 'below'} market median (MYR ${market_median_price?.toFixed(2)})` : null,
+  };
+}
+
+function generateMockResults(q) {
+  const base = hashNum(q, 50, 500);
+  return Object.entries(PLATFORMS).map(([platform, cfg], i) => ({
+    platform, title: q + ' — ' + cfg.label, price: +(base * (0.8 + i*0.05 + Math.random()*0.1)).toFixed(2),
+    original_price: Math.random() > 0.5 ? +(base * 1.3).toFixed(2) : null,
+    discount_pct: Math.random() > 0.5 ? +(10 + Math.random()*25).toFixed(1) : null,
+    currency: 'MYR', in_stock: true, seller_name: null, rating: +(3.5 + Math.random()*1.5).toFixed(1),
+    review_count: (Math.random()*500)|0, image_url: null, url: '#',
+  }));
+}
+
+function hashNum(s, lo, hi) {
+  let h = 0;
+  for (let c of s) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  return lo + (h % (hi - lo));
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+initPlatformFilters();
+</script>
+</body>
+</html>
