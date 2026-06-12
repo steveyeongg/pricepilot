@@ -22,7 +22,7 @@ A Dynamic Pricing & Competitor Intelligence Platform for Malaysian markets. Trac
 ## Platforms Covered
 
 **E-commerce:** Lazada, Shopee, Temu, Amazon, Alibaba  
-**Grocery:** Jaya Grocer, Village Grocer, 99 Speedmart, Giant, Lotus, AEON, AEON Big  
+**Grocery:** Jaya Grocer, Village Grocer, Lotus, AEON, AEON Big  
 **Electronics:** Various gadget stores
 
 ---
