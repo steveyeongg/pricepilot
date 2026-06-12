@@ -6,6 +6,7 @@
 
 A Dynamic Pricing & Competitor Intelligence Platform for Malaysian markets. Track prices across Lazada, Shopee, Temu, and major grocery retailers. Get fair price analytics, smart alerts, and ROI optimization — all in one place.
 
+[Click here](https://pricepilot-frontend-one.vercel.app/)
 ---
 
 ## Features
